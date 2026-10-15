@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MWI Market Browser</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--bg:#f4f5f8;--panel:#fff;--line:#e2e5ea;--text:#1b1f24;--mut:#667085;--gold:#a8680a;--good:#1a7f37;--bad:#cf222e;--soft:#f0f2f6}
+@media(prefers-color-scheme:dark){:root{--bg:#0d1117;--panel:#161b22;--line:#262d38;--text:#e6edf3;--mut:#8b96a5;--gold:#e3b341;--good:#3fb950;--bad:#f85149;--soft:#1c232d}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:1300px;margin:auto;padding:18px}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:14px}
+h1{font-size:19px;margin:0}h1 span{color:var(--gold)}.grow{flex:1}
+.pill{padding:5px 12px;border:1px solid var(--line);border-radius:99px;color:var(--mut);font-size:12px}
+button,.tab{background:var(--soft);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:7px 14px;cursor:pointer;font:inherit}
+.tab.on{border-color:var(--gold);font-weight:600}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--mut)}
+label.c{flex-direction:row;align-items:center;gap:6px;font-size:13px;color:var(--text)}
+input[type=number],input[type=text]{background:var(--soft);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:6px 8px;font:inherit;width:110px}
+.scroll{overflow-x:auto}table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{padding:7px 9px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);cursor:pointer;user-select:none}
+th:nth-child(1),td:nth-child(1){text-align:center;width:32px}th:nth-child(2),td:nth-child(2){text-align:left}
+tbody tr{cursor:pointer}tbody tr:hover{background:var(--soft)}
+.good{color:var(--good)}.bad{color:var(--bad)}.star{color:var(--mut);font-size:16px}.star.on{color:var(--gold)}
+.badge{padding:1px 8px;border-radius:99px;font-size:11px;font-weight:600;border:1px solid}
+.flag{font-size:10px;font-weight:700;color:var(--bad);margin-right:4px}
+.note{color:var(--mut);font-size:12px}.msg{padding:40px;text-align:center;color:var(--mut)}
+#drawer{position:fixed;top:0;right:0;height:100%;width:min(620px,100%);background:var(--panel);border-left:1px solid var(--line);transform:translateX(100%);transition:transform .25s;z-index:10;overflow-y:auto;padding:20px}
+#drawer.open{transform:none}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+.stat{background:var(--soft);border-radius:10px;padding:8px 10px}.stat small{display:block;color:var(--mut);font-size:10px;text-transform:uppercase}.stat b{font-size:15px}
+.cb{height:280px}@media(max-width:700px){input[type=number],input[type=text],select{font-size:16px;width:100%}.filters label{flex:1 1 44%}.wrap{padding:12px}th,td{padding:9px 8px}#drawer{padding:14px}.grid{grid-template-columns:repeat(2,1fr)}.tab{padding:8px 10px;font-size:13px}}.mini th,.mini td{text-align:right;width:auto}.mini th:first-child,.mini td:first-child{text-align:left}.mini tbody tr,.mini th{cursor:default}select{background:var(--soft);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:6px 8px;font:inherit}
+</style></head><body><div class="wrap">
+<header><h1><span>◆</span> Milky Way Idle Market Browser</h1><div class="grow"></div>
+<span class="pill" id="asof">Loading…</span><button id="reload">Reload</button></header>
+<div style="display:flex;gap:8px;margin-bottom:12px"><button class="tab on" data-t="flip">Flip finder</button><button class="tab" data-t="inv">Investments</button><button class="tab" data-t="all">All items</button><button class="tab" data-t="fresh">Freshness</button></div>
+<div class="card filters">
+<label>Search<input type="text" id="q" placeholder="item name"></label>
+<label>Min buy price<input type="number" id="minP"></label>
+<label>Max buy price (budget)<input type="number" id="maxP"></label>
+<label>Min units/day<input type="number" id="minV"></label>
+<label>Max spread %<input type="number" id="maxSp"></label>
+<label>Buy price basis<select id="buy"><option value="bid">Bid (7d median)</option><option value="ask">Ask (7d median)</option><option value="avg7">7-day avg trade</option><option value="avg30">30-day avg trade</option></select></label>
+<label>Sell price basis<select id="basis"><option value="ask">Ask (7d median)</option><option value="avg7">7-day avg trade</option><option value="avg30">30-day avg trade</option></select></label>
+<label>Market tax %<input type="number" id="tax" step="any"></label>
+<label>Your share of volume %<input type="number" id="share" step="any"></label>
+<label class="c"><input type="checkbox" id="so">Watchlist only</label></div>
+<div class="card scroll" id="tbl"><div class="msg">Loading market data…</div></div>
+<p class="note" id="foot"></p>
+</div>
+<aside id="drawer"><button id="close" style="float:right">✕</button><h2 id="dn" style="margin:0"></h2><div class="grid" id="ds"></div>
+<div class="card"><b>Flip calculator</b><div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px"><label>Units<input type="number" id="units" value="100"></label><label>Buy price override<input type="number" id="bp" step="any" placeholder="blank = use basis"></label><label>Sell price override<input type="number" id="sp" step="any" placeholder="your target price"></label></div><div id="fc" style="margin-top:8px"></div></div>
+<div class="cb"><canvas id="ch"></canvas></div><p class="note" id="hn"></p></aside>
+<script>
+const BASE="https://raw.githubusercontent.com/SeaL773/mwi-market-history/main/";
+const S={tab:"flip",rows:[],hist:{},days:[],sort:{flip:["est",-1],inv:["score",-1],all:["name",1],fresh:["dsT",-1]},star:new Set(),cur:null};
+const nm=h=>h.replace("/items/","").split("_").map(w=>w[0].toUpperCase()+w.slice(1)).join(" ");
+const fmt=n=>{if(n==null||!isFinite(n))return"–";const a=Math.abs(n),s=n<0?"-":"";return a>=1e9?s+(a/1e9).toFixed(2)+"B":a>=1e6?s+(a/1e6).toFixed(2)+"M":a>=1e4?s+(a/1e3).toFixed(1)+"K":s+Math.round(a).toLocaleString()};
+const pc=n=>n==null?"–":`<span class="${n>0?"good":n<0?"bad":""}">${n>0?"+":""}${n.toFixed(1)}%</span>`;
+const SIG={"DIP IN UPTREND":"#3fb950","NEAR 30D LOW":"#2dd4bf","STEADY MOMENTUM":"#58a6ff","NEUTRAL":"#8b96a5","OVERHEATED":"#e3b341","FALLING KNIFE":"#f85149"};
+const badge=s=>s?`<span class="badge" style="color:${SIG[s]};border-color:${SIG[s]}66">${s}</span>`:"–";
+
+function inv(arr){
+  const L=arr.slice(-30).map(x=>x&&(x[2]||(x[0]&&x[1]?(x[0]+x[1])/2:0))).filter(Boolean);
+  if(L.length<10)return{};
+  const last=L[L.length-1],mean=L.reduce((a,b)=>a+b)/L.length,sd=Math.sqrt(L.reduce((a,b)=>a+(b-mean)**2,0)/L.length)||1e-9;
+  const z=(last-mean)/sd,pct=100*L.filter(x=>x<=last).length/L.length;
+  const r7=L.length>7?last/L[L.length-8]-1:0,r30=last/L[0]-1;
+  const lr=[];for(let i=1;i<L.length;i++)lr.push(Math.log(L[i]/L[i-1]));
+  const mu=lr.reduce((a,b)=>a+b,0)/lr.length,vol=Math.sqrt(lr.reduce((a,b)=>a+(b-mu)**2,0)/lr.length);
+  const h1=L.slice(0,Math.ceil(L.length/2)),h2=L.slice(Math.floor(L.length/2));
+  const m1=h1.reduce((a,b)=>a+b)/h1.length,m2=h2.reduce((a,b)=>a+b)/h2.length;
+  const up=m2>m1*1.02,down=m2<m1*.95,hot=r30>.5||z>2.5;
+  let sc=Math.max(-3,Math.min(3,-z))*10+(50-pct)*.3+(up?10:down?-10:0)-(hot?20:0)-(vol>.08?5:0);
+  const sig=hot?"OVERHEATED":up&&z<=-1&&pct<=35?"DIP IN UPTREND":pct<=15&&!down?"NEAR 30D LOW":last>m2&&up&&r30>=.03&&r30<=.35?"STEADY MOMENTUM":down&&r30<-.1?"FALLING KNIFE":"NEUTRAL";
+  if(sig==="FALLING KNIFE")sc-=30;
+  return{price:Math.round(last),ret7:r7*100,ret30:r30*100,z:+z.toFixed(2),pct:Math.round(pct),volat:vol*100,signal:sig,score:+sc.toFixed(1)};
+}
+function fr(a){
+  let q=-1,t=-1;
+  for(let i=a.length-1;i>=0&&(q<0||t<0);i--){const x=a[i];if(!x)continue;if(q<0&&(x[0]>0||x[1]>0))q=i;if(t<0&&x[3]>0)t=i}
+  const ds=t<0?null:Math.max(0,Math.floor((Date.now()-Date.parse(S.days[t]+"T00:00:00Z"))/864e5));
+  return{lq:q<0?null:S.days[q],lt:t<0?null:S.days[t],dsT:ds,lv:t<0?null:a[t][3],status:t<0?"NO TRADES":ds<=1?"ACTIVE":ds<=3?"SLOW":"STALE"};
+}
+function a30(a){let sp=0,sv=0,n=0,s=0;a.slice(-30).forEach(x=>{if(x&&x[2]>0){s+=x[2];n++;if(x[3]>0){sp+=x[2]*x[3];sv+=x[3]}}});return sv>0?Math.round(sp/sv):n?Math.round(s/n):null}
+function derive(t,sh,basis,buyB){
+  for(const r of S.rows){
+    const m=S.hist[r.h];Object.assign(r,m?{...inv(m),...fr(m),avg30:a30(m)}:{avg30:null});
+    const ok=r.ask>0&&r.bid>0;r.sell=basis==="avg7"?r.avg:basis==="avg30"?r.avg30:r.ask;r.buy=buyB==="ask"?r.ask:buyB==="avg7"?r.avg:buyB==="avg30"?r.avg30:r.bid;const so=r.sell>0&&r.buy>0;
+    r.net=so?r.sell*(1-t)-r.buy:null;r.roi=so?r.net/r.buy*100:null;r.sp=ok?(r.ask-r.bid)/r.bid*100:null;
+    r.est=so&&r.net>0?r.net*r.vol*sh/100:0;
+    r.flags=[!ok?"ONE-SIDED":"",ok&&r.sp>40?"WIDE":"",r.vol<20?"THIN":"",ok&&r.avg&&(r.avg>r.ask*1.25||r.avg<r.bid*.8)?"OFF-BAND":""].filter(Boolean).join(" ");
+    
+  }
+}
+if(typeof document!=="undefined"){
+const $=id=>document.getElementById(id);
+const D={q:"",minP:100,maxP:0,minV:50,maxSp:40,tax:4,share:5,basis:"ask",buy:"bid",so:false};
+let sv={};try{sv=JSON.parse(localStorage.getItem("mwi-mkt")||"{}");S.star=new Set(JSON.parse(localStorage.getItem("mwi-star")||"[]"))}catch(e){}
+const V={...D,...sv};if(!sv.t4)V.tax=4;Object.keys(D).forEach(k=>{const e=$(k);if(typeof D[k]==="boolean")e.checked=V[k];else e.value=V[k]});
+const rd=()=>{const o={};Object.keys(D).forEach(k=>{const e=$(k);o[k]=typeof D[k]==="boolean"?e.checked:k==="q"?e.value.toLowerCase():(k==="basis"||k==="buy")?e.value:parseFloat(e.value)||0});return o};
+const COLS={
+ flip:[["name","Item"],["buy","Buy price"],["sell","Sell price"],["sp","Spread %"],["net","Net / unit"],["roi","ROI %"],["vol","Units/day"],["est","Est. daily profit"],["flags","Flags"]],
+ inv:[["name","Item"],["price","Price"],["ret7","7d"],["ret30","30d"],["z","Z-score"],["pct","30d range"],["volat","Volatility"],["vol","Units/day"],["signal","Signal"],["score","Score"]],
+ all:[["name","Item"],["avg","7d avg trade"],["bid","Bid"],["ask","Ask"],["vol","Units/day"]],
+ fresh:[["name","Item"],["lq","Last quote (UTC day)"],["lt","Last trade (UTC day)"],["dsT","Days since trade"],["lv","Units traded that day"],["status","Status"]]};
+const CELL={name:r=>r.name,buy:r=>fmt(r.buy),bid:r=>fmt(r.bid),ask:r=>fmt(r.ask),sell:r=>fmt(r.sell),sp:r=>r.sp==null?"–":r.sp.toFixed(1)+"%",net:r=>r.net==null?"–":`<span class="${r.net>0?"good":"bad"}">${fmt(r.net)}</span>`,roi:r=>pc(r.roi),vol:r=>fmt(r.vol),est:r=>fmt(r.est),
+ flags:r=>r.flags.split(" ").filter(Boolean).map(f=>`<span class="flag">${f}</span>`).join("")||"",price:r=>fmt(r.price),ret7:r=>pc(r.ret7),ret30:r=>pc(r.ret30),z:r=>r.z??"–",pct:r=>r.pct==null?"–":r.pct+"%",volat:r=>r.volat==null?"–":r.volat.toFixed(1)+"%",signal:r=>badge(r.signal),score:r=>r.score??"–",avg:r=>fmt(r.avg),lq:r=>r.lq||"–",lt:r=>r.lt||"none in 60d",dsT:r=>r.dsT==null?"–":r.dsT,lv:r=>fmt(r.lv),status:r=>r.status?`<span class="${r.status==="ACTIVE"?"good":r.status==="SLOW"?"":"bad"}">${r.status}</span>`:"–"};
+function view(){
+  const f=rd();try{localStorage.setItem("mwi-mkt",JSON.stringify({...f,t4:1}))}catch(e){}
+  derive(f.tax/100,f.share,f.basis,f.buy);
+  let rows=S.rows.filter(r=>r.name.toLowerCase().includes(f.q)&&(!f.so||S.star.has(r.h))&&(S.tab==="fresh"||r.vol>=f.minV));
+  if(S.tab==="flip")rows=rows.filter(r=>r.buy>=f.minP&&(!f.maxP||r.buy<=f.maxP)&&r.net>0&&r.sp<=f.maxSp);
+  if(S.tab==="inv")rows=rows.filter(r=>r.price&&r.price>=f.minP&&(!f.maxP||r.price<=f.maxP));
+  if(S.tab==="all"||S.tab==="fresh")rows=rows.filter(r=>(r.avg||r.bid||0)>=f.minP&&(!f.maxP||(r.avg||r.bid)<=f.maxP));
+  const [k,d]=S.sort[S.tab];
+  rows.sort((a,b)=>{const x=a[k],y=b[k];if(x==null)return 1;if(y==null)return -1;return(x>y?1:x<y?-1:0)*d});
+  if((S.tab==="inv"||S.tab==="fresh"||(S.tab==="flip"&&(f.basis==="avg30"||f.buy==="avg30")))&&!Object.keys(S.hist).length){$("tbl").innerHTML='<div class="msg">Loading price history…</div>';return}
+  const cols=COLS[S.tab];
+  $("tbl").innerHTML=`<table><thead><tr><th></th>${cols.map(([c,l])=>`<th data-k="${c}">${l}${k===c?(d>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>${rows.slice(0,400).map(r=>`<tr data-h="${r.h}"><td><span class="star ${S.star.has(r.h)?"on":""}" data-s="${r.h}">★</span></td>${cols.map(([c])=>`<td>${CELL[c](r)}</td>`).join("")}</tr>`).join("")}</tbody></table>`+(rows.length?"":'<div class="msg">No items match these filters.</div>');
+  $("foot").textContent=`${rows.length} items${rows.length>400?" (showing top 400)":""}. `+(S.tab==="flip"?"Net/unit = "+({ask:"ask",avg7:"7-day average trade price",avg30:"30-day average trade price"})[f.basis]+" after tax minus "+({bid:"bid",ask:"ask",avg7:"7-day average trade price",avg30:"30-day average trade price"})[f.buy]+". Est. daily profit = net x units/day x your share. Flags warn about thin, one-sided, or wide-spread markets that are hard to flip. ":S.tab==="inv"?"Signals use the last 30 days of daily average trade prices. ":S.tab==="fresh"?"Every item refreshes together with the game's hourly snapshot (see the time at the top). This table shows each item's most recent UTC day with quotes and with trades, over roughly the last 60 days. ":"")+"Prices are 7-day medians of daily quotes, not live order books. Not financial advice.";
+}
+$("tbl").onclick=e=>{
+  const th=e.target.closest("th");if(th&&th.dataset.k){const k=th.dataset.k,c=S.sort[S.tab];S.sort[S.tab]=[k,c[0]===k?-c[1]:(k==="name"||k==="flags"?1:-1)];return view()}
+  const st=e.target.closest("[data-s]");if(st){const h=st.dataset.s;S.star.has(h)?S.star.delete(h):S.star.add(h);try{localStorage.setItem("mwi-star",JSON.stringify([...S.star]))}catch(x){}return view()}
+  const tr=e.target.closest("tr[data-h]");if(tr)open(S.rows.find(r=>r.h===tr.dataset.h));
+};
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{S.tab=b.dataset.t;document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x===b));view()});
+document.querySelector(".filters").addEventListener("input",view);
+$("close").onclick=()=>$("drawer").classList.remove("open");document.addEventListener("keydown",e=>{if(e.key==="Escape")$("close").click()});
+let chart;
+function calc(){const r=S.cur;if(!r)return;const u=+$("units").value||0,t=(+$("tax").value||0)/100,o=+$("bp").value,s2=+$("sp").value,b=o>0?o:r.buy;
+  const L=[["Ask (7d median)",r.ask],["7-day avg trade",r.avg],["30-day avg trade",r.avg30],...(s2>0?[["Your sell price",s2]]:[])];
+  $("fc").innerHTML=b>0?`Buy ${u.toLocaleString()} at ${fmt(b)}${o>0?" (your price)":""} = <b>${fmt(u*b)}</b><div class="scroll"><table class="mini" style="margin-top:8px"><thead><tr><th>Sell at</th><th>Price</th><th>After ${(t*100).toFixed(1)}% tax</th><th>Profit</th></tr></thead><tbody>${L.map(([n,p])=>{const ok=p>0,g=ok?u*(p*(1-t)-b):0;return`<tr><td>${n}</td><td>${fmt(p)}</td><td>${ok?fmt(u*p*(1-t)):"–"}</td><td class="${g>0?"good":"bad"}">${ok?fmt(g):"–"}</td></tr>`}).join("")}</tbody></table></div><div class="note" style="margin-top:6px">Break-even sell price after tax: <b>${fmt(Math.ceil(b/(1-t)))}</b></div>`:"No buy price is available for this item. Try another buy basis or enter your own price.";}
+$("units").oninput=calc;$("bp").oninput=calc;$("sp").oninput=calc;
+function open(r){
+  S.cur=r;$("dn").textContent=r.name;
+  const st=[["Bid (7d med.)",fmt(r.bid)],["Ask (7d med.)",fmt(r.ask)],["7d avg trade",fmt(r.avg)],["30d avg trade",fmt(r.avg30)],["Units / day",fmt(r.vol)],["Buy price used",fmt(r.buy)],["Net / unit",fmt(r.net)],["ROI",r.roi==null?"–":r.roi.toFixed(1)+"%"],["30d change",r.ret30==null?"–":r.ret30.toFixed(1)+"%"],["Z-score",r.z??"–"],["Signal",r.signal||"–"]];
+  $("ds").innerHTML=st.map(([a,b])=>`<div class="stat"><small>${a}</small><b>${b}</b></div>`).join("");
+  $("bp").value="";$("sp").value="";calc();$("drawer").classList.add("open");
+  const h=S.hist[r.h];chart&&chart.destroy();chart=null;
+  if(!h){$("hn").textContent="History is still loading or unavailable for this item.";return}
+  $("hn").textContent="Daily medians of hourly quotes and volume-weighted average trade price.";
+  const g=i=>h.map(x=>x?x[i]||null:null);
+  chart=new Chart($("ch"),{data:{labels:S.days.map(d=>d.slice(5)),datasets:[
+   {type:"line",label:"Ask",data:g(0),borderColor:"#f85149",pointRadius:0,borderWidth:1.5,spanGaps:true,yAxisID:"y"},
+   {type:"line",label:"Bid",data:g(1),borderColor:"#3fb950",pointRadius:0,borderWidth:1.5,spanGaps:true,yAxisID:"y"},
+   {type:"line",label:"Avg trade",data:g(2),borderColor:"#e3b341",pointRadius:0,borderWidth:2.5,spanGaps:true,yAxisID:"y"},
+   {type:"bar",label:"Volume",data:g(3),backgroundColor:"#8b96a533",yAxisID:"y1"}]},
+   options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},plugins:{legend:{labels:{color:"#8b96a5",boxWidth:10}}},
+    scales:{x:{ticks:{color:"#8b96a5",maxTicksLimit:8},grid:{display:false}},y:{ticks:{color:"#8b96a5"},grid:{color:"#8b96a533"}},y1:{display:false,position:"right",max:Math.max(...g(3).map(v=>v||0),1)*4,grid:{display:false}}}}});
+}
+async function loadHist(){
+  const d=new Date(),ms=[1,0].map(i=>{const x=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()-i,1));return x.getUTCFullYear()+"-"+String(x.getUTCMonth()+1).padStart(2,"0")});
+  const parts=[];for(const m of ms){try{const r=await fetch(BASE+"daily/"+m+"/0.json");if(r.ok)parts.push(await r.json())}catch(e){}}
+  const days=parts.flatMap(p=>p.days),items={};let off=0;
+  for(const p of parts){for(const [h,rows] of Object.entries(p.items)){const a=items[h]||(items[h]=Array(days.length).fill(null));rows.forEach((x,i)=>a[off+i]=x)}off+=p.days.length}
+  S.days=days;S.hist=items;view();
+}
+async function load(){
+  $("asof").textContent="Loading…";
+  try{
+    const sum=await (await fetch(BASE+"summary.json",{cache:"no-store"})).json();
+    S.rows=[];for(const [h,lv] of Object.entries(sum.items)){const a=lv["0"];if(a)S.rows.push({h,name:nm(h),avg:a[0],vol:a[1]||0,ask:a[2],bid:a[3]})}
+    const age=(Date.now()/1000-sum.timestamp)/3600;
+    $("asof").textContent="Data as of "+new Date(sum.timestamp*1000).toLocaleString()+(age>3?" (stale, check the archive)":"");
+    view();loadHist();
+  }catch(e){$("tbl").innerHTML='<div class="msg">Could not load market data ('+e.message+'). Check your connection and press Reload.</div>';$("asof").textContent="Load failed"}
+}
+$("reload").onclick=load;load();setInterval(load,30*60*1000);
+}
+</script></body></html>
